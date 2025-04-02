@@ -17,7 +17,7 @@ with col2:
     st.title("Answer")
     output_text_area = st.subheader("")
 
-genai.configure(api_key="AIzaSyDGnPS49ssU5Z0map8ixTwgM6Nj2eQo-BE")
+genai.configure(api_key="")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Initialize the webcam with a default camera index of 0
