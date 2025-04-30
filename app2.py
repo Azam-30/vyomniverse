@@ -14,6 +14,7 @@ import fitz
 import hashlib
 import tempfile
 from functools import lru_cache
+from docx import Document  # Add this with your other imports
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -253,6 +254,19 @@ def extract_text_from_pdf(file, api_key):
     
     return text
 
+def extract_text_from_docx(file):
+    """Extract text from DOCX files"""
+    try:
+        doc = Document(file)
+        full_text = []
+        for para in doc.paragraphs:
+            full_text.append(para.text)
+        return "\n".join(full_text)
+    except Exception as e:
+        st.error(f"Error processing DOCX: {str(e)}")
+        return ""
+
+
 def extract_text_from_url(url):
     """Extract text content from a webpage"""
     try:
@@ -326,6 +340,8 @@ def handle_media_upload(uploaded_file):
         st.error(f"Error processing file: {str(e)}")
         return None
 
+
+
 def main():
     st.set_page_config(
         page_title="The VyomniVerse",
@@ -398,13 +414,70 @@ def main():
         st.divider()
         st.subheader("📤 Upload Content")
         
-        # Image/Video Upload section
+        # Unified file uploader for all media types
         uploaded_file = st.file_uploader(
-            "Image/Video (PNG, JPG, MP4)", 
-            type=["png", "jpg", "jpeg", "mp4"],
-            key="file_uploader"
+            "Upload Files (Images, Videos, PDFs, DOCX)", 
+            type=["png", "jpg", "jpeg", "mp4", "pdf", "docx"],
+            key="unified_file_uploader",
+            help="Upload images (PNG/JPG), videos (MP4), PDFs or Word documents (DOCX)"
         )
-        
+
+        # Handle the unified file upload
+        if uploaded_file:
+            file_bytes = uploaded_file.read()
+            file_hash = get_file_hash(file_bytes)
+            
+            if file_hash not in st.session_state.processed_files:
+                st.session_state.processed_files.add(file_hash)
+                uploaded_file.seek(0)  # Reset file pointer after reading
+                
+                # Determine file type and process accordingly
+                file_type = uploaded_file.type
+                
+                if file_type.startswith("image/"):
+                    # Process as image
+                    media_content = handle_media_upload(uploaded_file)
+                    if media_content:
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": [media_content]
+                        })
+                
+                elif file_type.startswith("video/"):
+                    # Process as video
+                    media_content = handle_media_upload(uploaded_file)
+                    if media_content:
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": [media_content]
+                        })
+                
+                elif file_type == "application/pdf":
+                    # Process as PDF
+                    pdf_text = extract_text_from_pdf(uploaded_file, google_api_key)
+                    if pdf_text.strip():
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": [{
+                                "type": "text",
+                                "text": f"Extracted from PDF:\n\n{pdf_text}"
+                            }]
+                        })
+                
+                elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                    # Process as DOCX
+                    docx_text = extract_text_from_docx(uploaded_file)
+                    if docx_text.strip():
+                        st.session_state.messages.append({
+                            "role": "user",
+                            "content": [{
+                                "type": "text",
+                                "text": f"Extracted from Word Document:\n\n{docx_text}"
+                            }]
+                        })
+                
+                st.rerun()
+
         # Camera option below file uploader
         with st.popover("📸 Camera"):
             activate_camera = st.checkbox("Activate camera")
@@ -435,25 +508,6 @@ def main():
                         })
                         st.rerun()
 
-        # Handle the regular file upload
-        if uploaded_file:
-            file_bytes = uploaded_file.read()
-            file_hash = get_file_hash(file_bytes)
-            
-            if file_hash not in st.session_state.processed_files:
-                st.session_state.processed_files.add(file_hash)
-                uploaded_file.seek(0)  # Reset file pointer after reading
-                
-                media_content = handle_media_upload(uploaded_file)
-                if media_content:
-                    # Add to messages and display immediately
-                    st.session_state.messages.append({
-                        "role": "user",
-                        "content": [media_content]
-                    })
-                    # Generate response immediately
-                    st.rerun()
-
         # Audio recorder
         st.write("**🎤 Record Audio**")
         audio_bytes = audio_recorder(
@@ -474,31 +528,6 @@ def main():
                         "content": [{
                             "type": "audio_file",
                             "audio_file": tmp_file.name
-                        }]
-                    })
-                    st.rerun()
-
-        # PDF uploader
-        uploaded_pdf = st.file_uploader(
-            "PDF Document", 
-            type=["pdf"],
-            key="pdf_uploader"
-        )
-        
-        if uploaded_pdf:
-            file_bytes = uploaded_pdf.read()
-            file_hash = get_file_hash(file_bytes)
-            
-            if file_hash not in st.session_state.processed_files:
-                st.session_state.processed_files.add(file_hash)
-                uploaded_pdf.seek(0)  # Reset file pointer after reading
-                pdf_text = extract_text_from_pdf(uploaded_pdf, google_api_key)
-                if pdf_text.strip():
-                    st.session_state.messages.append({
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "text": f"Extracted from PDF:\n\n{pdf_text}"
                         }]
                     })
                     st.rerun()
@@ -528,6 +557,8 @@ def main():
             mime="text/plain",
             use_container_width=True
         )
+
+    
 
     # Chat input
     if prompt := st.chat_input("Hi! Ask me anything..."):
