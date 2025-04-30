@@ -14,7 +14,7 @@ import fitz
 import hashlib
 import tempfile
 from functools import lru_cache
-from docx import Document  # Add this with your other imports
+from docx import Document  
 
 # Load environment variables
 dotenv.load_dotenv()
